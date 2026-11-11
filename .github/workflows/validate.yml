@@ -1,7 +1,9 @@
 name: Validate library
 on:
   pull_request:
+    branches: [master]
   push:
+    branches: [master]
 permissions:
   contents: read
 jobs:
@@ -81,3 +83,13 @@ jobs:
           assert any(f['id'] == 'test-eval' for f in report['findings']), report
           assert any(f['scanner'] == 'trivy' for f in report['findings']), report
           PYTHON
+
+      - name: Upload scanner smoke-test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: scanner-smoke-reports
+          path: ${{ runner.temp }}/smoke-reports
+          retention-days: 7
+          if-no-files-found: warn
+          overwrite: true

@@ -58,7 +58,7 @@ runs:
 
         timeout 20m docker run --rm --cap-drop=ALL --security-opt=no-new-privileges \
           -v "$(realpath "$SOURCE"):/src:ro" -w /src \
-          ghcr.io/semgrep/semgrep:1.185.0 semgrep scan \
+          semgrep/semgrep:1.185.0 semgrep scan \
           --oss-only --metrics=off --disable-version-check --json \
           "${args[@]}" -- "$TARGET" > "$REPORTS/$FILE" 2> "$REPORTS/$FILE.log"
 

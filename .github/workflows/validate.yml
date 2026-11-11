@@ -12,6 +12,7 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 -m unittest discover -s tests/security -v
+      - run: node --test tests/releases/*.test.cjs
       - name: Install pinned actionlint
         env:
           ACTIONLINT_VERSION: 1.7.12

@@ -1,0 +1,35 @@
+name: Protect release files
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions: {}
+
+jobs:
+  managed-files:
+    name: Release-managed files
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out trusted policy from the PR base
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Enforce managed file policy
+        uses: actions/github-script@v9.0.0
+        env:
+          RELEASE_PLEASE_ACTOR: ${{ vars.RELEASE_PLEASE_ACTOR || 'github-actions[bot]' }}
+        with:
+          script: |
+            const checkManagedFiles = require('./scripts/releases/check-managed-files.cjs');
+            await checkManagedFiles({
+              github,
+              context,
+              core,
+              releaseActor: process.env.RELEASE_PLEASE_ACTOR,
+            });

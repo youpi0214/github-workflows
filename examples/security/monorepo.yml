@@ -1,0 +1,54 @@
+name: Selective monorepo security
+on:
+  pull_request:
+  push:
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      targets: ${{ steps.targets.outputs.targets }}
+      changed: ${{ steps.targets.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: targets
+        name: Select components (adapt this map to your repository)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.sha }}
+        shell: python
+        run: |
+          import json, os, subprocess
+          # Example structure only. Replace with your existing change-detection outputs.
+          components = [
+              {"name": "api", "paths": ["services/api"]},
+              {"name": "web", "paths": ["apps/web"], "dependency-paths": ["pnpm-lock.yaml"]},
+              {"name": "mobile", "paths": ["apps/mobile"], "dependency-paths": ["pnpm-lock.yaml"]},
+              {"name": "data", "paths": ["tools/data"]},
+              {"name": "infrastructure", "paths": ["infra", ".github"]},
+          ]
+          base = os.environ['BASE']
+          files = None
+          if base and set(base) != {'0'}:
+              diff = subprocess.run(['git', 'diff', '--name-only', '-z', base, os.environ['HEAD']], capture_output=True)
+              if diff.returncode == 0:
+                  files = diff.stdout.decode().split('\0')
+          global_change = files is None or any(p in {'pnpm-workspace.yaml', '.semgrepignore'} or p.startswith('.github/') for p in files)
+          targets = [c for c in components if global_change or any(
+              f == p or f.startswith(p + '/') for f in files for p in c['paths'] + c.get('dependency-paths', []))]
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('targets=' + json.dumps(targets) + '\n')
+              output.write('changed=' + str(bool(targets)).lower() + '\n')
+  security:
+    needs: changes
+    if: needs.changes.outputs.changed == 'true'
+    uses: youpi0214/github-workflows/.github/workflows/security-scan.yml@v1.0.0
+    with:
+      library-ref: v1.0.0
+      targets: ${{ needs.changes.outputs.targets }}
+      pr-comment: true

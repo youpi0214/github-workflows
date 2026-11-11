@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Security report</title>
+
+    <style>
+      body {
+        font: 16px system-ui;
+        background: #101827;
+        color: #e5edf9;
+        margin: 0;
+      }
+
+      main {
+        max-width: 1300px;
+        margin: auto;
+        padding: 32px;
+      }
+
+      h1 {
+        font-size: 36px;
+      }
+
+      header,
+      panel {
+        display: block;
+        background: #1c293e;
+        padding: 24px;
+        border-radius: 16px;
+        margin-bottom: 24px;
+      }
+
+      .stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+      }
+
+      .stat {
+        padding: 18px;
+        background: #263952;
+        border-radius: 12px;
+      }
+
+      input,
+      select,
+      button {
+        padding: 10px;
+        margin: 6px;
+        border-radius: 6px;
+        border: 1px solid #7287a3;
+        background: #1c293e;
+        color: inherit;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      td,
+      th {
+        text-align: left;
+        padding: 12px;
+        border-bottom: 1px solid #40516a;
+        vertical-align: top;
+      }
+
+      a {
+        color: #83cdff;
+      }
+
+      details {
+        max-width: 600px;
+        overflow-wrap: anywhere;
+      }
+
+      pre {
+        white-space: pre-wrap;
+      }
+
+      .scroll {
+        overflow: auto;
+      }
+
+      .HIGH,
+      .CRITICAL {
+        color: #ff9f9f;
+      }
+
+      .MEDIUM {
+        color: #ffd481;
+      }
+
+      small {
+        color: #b3c1d5;
+      }
+
+    </style>
+  </head>
+
+  <body>
+    <main>
+      <header>
+        <small>ENGINEERING / SECURITY</small>
+        <h1>Security overview</h1>
+        <p id="status"></p>
+        <a id="run">Workflow details &amp; downloads</a>
+      </header>
+      <div class="stats" id="stats"></div>
+      <panel
+        ><h2>Scan coverage</h2>
+        <pre id="coverage"></pre>
+        <pre id="failures"></pre></panel
+      ><panel
+        ><h2>Investigate findings</h2>
+        <input
+          id="search"
+          aria-label="Search findings"
+          placeholder="Search findings" /><select
+          id="severity"
+          aria-label="Severity"
+        ></select
+        ><select id="scanner" aria-label="Scanner"></select
+        ><select id="component" aria-label="Component"></select
+        ><button id="sort">Reverse severity order</button>
+        <p id="count"></p>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Severity</th>
+                <th>Scanner / component</th>
+                <th>Finding</th>
+                <th>Location</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table></div
+      ></panel>
+    </main>
+    <script type="application/json" id="data">
+      __SECURITY_REPORT_DATA__
+    </script>
+    <script>
+      const report = JSON.parse(document.getElementById("data").textContent);
+      const filterKeys = ["severity", "scanner", "component"];
+      let reverseSeverity = false;
+
+      function getElement(id) {
+        return document.getElementById(id);
+      }
+
+      // Treat every scanner-provided field as text, never as HTML.
+      function appendTextElement(tag, text, parent) {
+        const element = document.createElement(tag);
+        element.textContent = text;
+        parent.append(element);
+        return element;
+      }
+
+      function appendSafeLink(url, text, parent) {
+        try {
+          const parsed = new URL(url);
+          if (["http:", "https:"].includes(parsed.protocol)) {
+            const anchor = appendTextElement("a", text, parent);
+            anchor.href = parsed.href;
+            anchor.rel = "noopener noreferrer";
+          }
+        } catch {
+          // Missing or malformed advisory URLs do not prevent rendering a finding.
+        }
+      }
+
+      function appendFinding(finding) {
+        const row = appendTextElement("tr", "", getElement("rows"));
+        appendTextElement("td", finding.severity, row).className =
+          finding.severity;
+        appendTextElement(
+          "td",
+          finding.scanner + " / " + finding.component,
+          row,
+        );
+
+        const findingCell = appendTextElement("td", "", row);
+        const details = appendTextElement("details", "", findingCell);
+        appendTextElement(
+          "summary",
+          finding.id + " · " + finding.title,
+          details,
+        );
+        appendTextElement("p", finding.description, details);
+        appendTextElement("p", "Package: " + (finding.package || "—"), details);
+        appendTextElement(
+          "pre",
+          "Fix: " + (finding.fix || "No fix supplied"),
+          details,
+        );
+        appendSafeLink(finding.advisory, "Advisory", details);
+
+        const locationCell = appendTextElement(
+          "td",
+          finding.location + ":" + finding.line,
+          row,
+        );
+        appendSafeLink(finding.source, " View source", locationCell);
+      }
+
+      function matchesFilters(finding) {
+        const matchesSelection = filterKeys.every((key) => {
+          const selected = getElement(key).value;
+          return !selected || finding[key] === selected;
+        });
+        const search = getElement("search").value.toLowerCase();
+        const matchesSearch = JSON.stringify(finding)
+          .toLowerCase()
+          .includes(search);
+
+        return matchesSelection && matchesSearch;
+      }
+
+      function renderFindings() {
+        getElement("rows").replaceChildren();
+        const findings = report.findings.filter(matchesFilters);
+
+        if (reverseSeverity) {
+          findings.reverse();
+        }
+
+        getElement("count").textContent = findings.length + " findings";
+        for (const finding of findings) {
+          appendFinding(finding);
+        }
+      }
+
+      getElement("status").textContent = report.status;
+      getElement("run").href = report.run_url;
+      getElement("coverage").textContent = report.scans
+        .map((scan) => `${scan.scanner} / ${scan.component}: ${scan.target}`)
+        .join("\n");
+      getElement("failures").textContent = report.failures.join("\n");
+
+      for (const [severity, count] of Object.entries(report.counts)) {
+        const card = appendTextElement(
+          "div",
+          `${severity} · ${count}`,
+          getElement("stats"),
+        );
+        card.className = "stat " + severity;
+      }
+
+      for (const key of filterKeys) {
+        const select = getElement(key);
+        appendTextElement("option", "All " + key, select).value = "";
+
+        const values = new Set(report.findings.map((finding) => finding[key]));
+        for (const value of values) {
+          appendTextElement("option", value, select).value = value;
+        }
+
+        select.onchange = renderFindings;
+      }
+
+      getElement("search").oninput = renderFindings;
+      getElement("sort").onclick = () => {
+        reverseSeverity = !reverseSeverity;
+        renderFindings();
+      };
+
+      renderFindings();
+    </script>
+  </body>
+</html>

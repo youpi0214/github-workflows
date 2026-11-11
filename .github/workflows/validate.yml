@@ -1,0 +1,82 @@
+name: Validate library
+on:
+  pull_request:
+  push:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s tests/security -v
+      - name: Install pinned actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+        run: |
+          curl --fail --silent --show-error --location "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o /tmp/actionlint.tar.gz
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+      - run: /tmp/actionlint -shellcheck= .github/workflows/*.yml examples/security/*.yml
+  scanner-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare controlled scanner fixtures
+        run: |
+          mkdir -p "$RUNNER_TEMP/fixture"
+          echo 'eval(input())' > "$RUNNER_TEMP/fixture/app.py"
+          printf 'FROM alpine:3.20\nUSER root\n' > "$RUNNER_TEMP/fixture/Dockerfile"
+          cat > "$RUNNER_TEMP/fixture/rules.yaml" <<'RULES'
+          rules:
+            - id: test-eval
+              languages: [python]
+              severity: ERROR
+              message: Avoid eval
+              pattern: eval(...)
+          RULES
+      - name: Exercise Semgrep integration
+        uses: ./actions/security-scan
+        with:
+          source: ${{ runner.temp }}/fixture
+          reports: ${{ runner.temp }}/smoke-reports
+          scope: '{"scanner":"semgrep","target":".","file":"0.json"}'
+          semgrep-rules: '["rules.yaml"]'
+
+      - name: Exercise Trivy integration
+        uses: ./actions/security-scan
+        with:
+          source: ${{ runner.temp }}/fixture
+          reports: ${{ runner.temp }}/smoke-reports
+          scope: '{"scanner":"trivy","target":".","file":"1.json"}'
+
+      - name: Check scanner outcomes and unified reporting
+        env:
+          REPORTS: ${{ runner.temp }}/smoke-reports
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+
+          reports = Path(os.environ['REPORTS'])
+          records = [
+              dict(scanner=scanner, component='repository', target='.', file=f'{index}.json', exit_code=-1)
+              for index, scanner in enumerate(['semgrep', 'trivy'])
+          ]
+          (reports / 'manifest.json').write_text(json.dumps(records))
+          PYTHON
+
+          python3 scripts/security/report.py "$REPORTS"
+
+          python3 - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+
+          report = json.loads((Path(os.environ['REPORTS']) / 'report.json').read_text())
+          assert not report['failures'], report['failures']
+          assert any(f['id'] == 'test-eval' for f in report['findings']), report
+          assert any(f['scanner'] == 'trivy' for f in report['findings']), report
+          PYTHON

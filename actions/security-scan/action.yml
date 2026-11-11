@@ -1,0 +1,102 @@
+name: Run one security scan
+description: Execute Semgrep CE or Trivy and capture its outcome for unified reporting
+
+inputs:
+  scope:
+    description: Validated JSON scan record from the planner
+    required: true
+  source:
+    description: Source directory relative to the workspace
+    default: source
+  reports:
+    description: Absolute output directory
+    required: true
+  semgrep-rules:
+    default: '["p/default"]'
+    description: JSON ruleset list
+  trivy-ignore-unfixed:
+    default: "false"
+    description: Exclude vulnerabilities without fixes
+  trivy-skip-dirs:
+    default: "[]"
+    description: JSON list of excluded directories
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare scanner configuration
+      shell: python
+      env:
+        REPORTS: ${{ inputs.reports }}
+        SKIP_DIRS: ${{ inputs.trivy-skip-dirs }}
+      run: |
+        import json, os
+        from pathlib import Path
+
+        reports = Path(os.environ['REPORTS'])
+        reports.mkdir(parents=True, exist_ok=True)
+        config = {'ignorefile': '/dev/null', 'skip-dirs': json.loads(os.environ['SKIP_DIRS'])}
+        (reports / 'trivy.yaml').write_text(json.dumps(config))
+
+    - name: Semgrep Community Edition
+      id: semgrep
+      if: fromJSON(inputs.scope).scanner == 'semgrep'
+      continue-on-error: true
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.source }}
+        REPORTS: ${{ inputs.reports }}
+        TARGET: ${{ fromJSON(inputs.scope).target }}
+        FILE: ${{ fromJSON(inputs.scope).file }}
+        RULES: ${{ inputs.semgrep-rules }}
+      run: |
+        mapfile -d '' -t rules < <(jq -j '.[] | ., "\u0000"' <<< "$RULES")
+        args=()
+        for rule in "${rules[@]}"; do
+          args+=(--config "$rule")
+        done
+
+        timeout 20m docker run --rm --cap-drop=ALL --security-opt=no-new-privileges \
+          -v "$(realpath "$SOURCE"):/src:ro" -w /src \
+          ghcr.io/semgrep/semgrep:1.185.0 semgrep scan \
+          --oss-only --metrics=off --disable-version-check --json \
+          "${args[@]}" -- "$TARGET" > "$REPORTS/$FILE" 2> "$REPORTS/$FILE.log"
+
+    - name: Trivy vulnerabilities and misconfigurations
+      id: trivy
+      if: fromJSON(inputs.scope).scanner == 'trivy'
+      continue-on-error: true
+      uses: aquasecurity/trivy-action@v0.36.0
+      env:
+        TRIVY_IGNOREFILE: /dev/null
+      with:
+        version: v0.76.2
+        scan-type: fs
+        scan-ref: ${{ inputs.source }}/${{ fromJSON(inputs.scope).target }}
+        scanners: vuln,misconfig
+        format: json
+        output: ${{ inputs.reports }}/${{ fromJSON(inputs.scope).file }}
+        exit-code: "0"
+        timeout: 20m
+        ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
+        trivy-config: ${{ inputs.reports }}/trivy.yaml
+        cache-dir: ${{ runner.temp }}/trivy-cache
+
+    - name: Record scanner outcome
+      if: always()
+      shell: python
+      env:
+        REPORTS: ${{ inputs.reports }}
+        SCOPE: ${{ inputs.scope }}
+        SEMGREP_OUTCOME: ${{ steps.semgrep.outcome }}
+        TRIVY_OUTCOME: ${{ steps.trivy.outcome }}
+      run: |
+        import json, os
+        from pathlib import Path
+
+        scope = json.loads(os.environ['SCOPE'])
+        outcome = os.environ[scope['scanner'].upper() + '_OUTCOME']
+        reports = Path(os.environ['REPORTS'])
+        reports.mkdir(parents=True, exist_ok=True)
+        status = {'exit_code': 0 if outcome == 'success' else -1, 'outcome': outcome}
+        (reports / (scope['file'] + '.status.json')).write_text(json.dumps(status))

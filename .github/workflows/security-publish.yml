@@ -1,0 +1,71 @@
+name: Publish trusted full security report
+on:
+  workflow_call:
+    inputs:
+      library-ref:
+        description: Release version tag matching the calling security workflow version
+        type: string
+        required: true
+      artifact-id:
+        type: string
+        required: true
+permissions: {}
+concurrency:
+  group: security-release-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          artifact-ids: ${{ inputs.artifact-id }}
+          path: reports
+      - name: Validate complete full-scan coverage
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('reports/report.json').read_text())
+          if report['status'] not in ('CLEAN', 'FINDINGS') or report['failures']:
+              raise ValueError('only complete reports may be published')
+          if not report['scans'] or any(
+              scan['component'] != 'repository' or scan['target'] != '.'
+              for scan in report['scans']
+          ):
+              raise ValueError('only full scans may be published')
+
+      - name: Publish historical report
+        uses: softprops/action-gh-release@v3.0.4
+        with:
+          repository: ${{ github.repository }}
+          tag_name: security-report-${{ github.run_id }}-${{ github.run_attempt }}
+          target_commitish: ${{ github.sha }}
+          name: Security report ${{ github.run_id }} / ${{ github.run_attempt }}
+          body: Trusted full security scan. Download index.html to view offline.
+          make_latest: "false"
+          fail_on_unmatched_files: true
+          files: |
+            reports/index.html
+            reports/report.json
+
+      - name: Update latest report assets
+        uses: softprops/action-gh-release@v3.0.4
+        with:
+          repository: ${{ github.repository }}
+          tag_name: security-report-latest
+          target_commitish: ${{ github.sha }}
+          name: Latest security report
+          body: Trusted full security scan. Download index.html to view offline.
+          make_latest: "false"
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            reports/index.html
+            reports/report.json

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/youpi0214/github-workflows/compare/v1.3.0...v1.4.0) (2026-11-12)
+
+
+### Features
+
+* Improve versionning ([#9](https://github.com/youpi0214/github-workflows/issues/9)) ([3251028](https://github.com/youpi0214/github-workflows/commit/3251028d5d19478a49fda6acd75a5dbf8d25b536))
+
 ## [1.3.0](https://github.com/youpi0214/github-workflows/compare/v1.2.0...v1.3.0) (2026-11-12)
 
 

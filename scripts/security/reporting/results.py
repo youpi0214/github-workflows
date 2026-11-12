@@ -48,10 +48,19 @@ def aggregate(directory):
     try:
         records = json.loads((directory / "manifest.json").read_text())
 
-        if not isinstance(records, list) or not records:
-            raise ValueError("no completed scan records")
+        if not isinstance(records, list):
+            raise ValueError("invalid scan manifest")
 
-    except (OSError, ValueError) as exc:
+        if not records:
+            selection = json.loads((directory / "selection.json").read_text())
+            components = json.loads((directory / "plan.json").read_text())
+
+            if selection.get("scan-required") is not False or components != []:
+                raise ValueError("no completed scan records")
+
+            return [], [], []
+
+    except (OSError, ValueError, AttributeError) as exc:
         return [], [str(exc)], []
 
     for record in records:
@@ -76,7 +85,9 @@ def aggregate(directory):
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
             failures.append(f"{record.get('scanner')}/{record.get('component')}: {exc}")
 
-    unique_findings = {json.dumps(finding, sort_keys=True): finding for finding in findings}
+    unique_findings = {
+        json.dumps(finding, sort_keys=True): finding for finding in findings
+    }
     sorted_findings = sorted(
         unique_findings.values(),
         key=lambda finding: SEVERITIES.index(finding["severity"]),

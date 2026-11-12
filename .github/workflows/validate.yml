@@ -13,7 +13,14 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
+      - name: Install configuration parser for selection tests
+        run: >-
+          python3 -m pip install --disable-pip-version-check
+          --target "$RUNNER_TEMP/security-python"
+          --requirement scripts/security/requirements.txt
       - run: python3 -m unittest discover -s tests/security -v
+        env:
+          PYTHONPATH: ${{ runner.temp }}/security-python
       - run: node --test tests/releases/*.test.cjs
       - name: Install pinned actionlint
         env:
@@ -72,7 +79,9 @@ jobs:
           (reports / 'manifest.json').write_text(json.dumps(records))
           PYTHON
 
-          python3 scripts/security/report.py "$REPORTS"
+          GITHUB_STEP_SUMMARY="$REPORTS/step-summary.md" \
+          GITHUB_OUTPUT="$REPORTS/github-output" \
+            python3 scripts/security/report.py "$REPORTS"
 
           python3 - <<'PYTHON'
           import json, os

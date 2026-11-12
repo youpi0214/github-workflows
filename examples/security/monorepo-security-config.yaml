@@ -1,0 +1,28 @@
+# Copy this configuration to .github/security.yml in the calling repository.
+# # then edit as needed
+components:
+  api:
+    paths:
+      - services/api
+  web:
+    paths:
+      - apps/web
+    dependency-paths:
+      - pnpm-lock.yaml
+  mobile:
+    paths:
+      - apps/mobile
+    dependency-paths:
+      - pnpm-lock.yaml
+  data:
+    paths:
+      - tools/data
+  infrastructure:
+    paths:
+      - infra
+      - .github
+
+full-scan-on-change:
+  - .github/security.yml
+  - .semgrepignore
+  - pnpm-workspace.yaml

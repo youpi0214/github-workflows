@@ -93,7 +93,13 @@ class Reports(unittest.TestCase):
             self.assertEqual(len(errors), 1)
             self.assertEqual(rows[0]["severity"], "CRITICAL")
 
-            env = dict(os.environ, ENFORCE="false", FAIL_ON_ERROR="true")
+            env = dict(
+                os.environ,
+                ENFORCE="false",
+                FAIL_ON_ERROR="true",
+                GITHUB_STEP_SUMMARY=str(p / "step-summary.md"),
+                GITHUB_OUTPUT=str(p / "github-output"),
+            )
             subprocess.run(
                 ["python3", str(ROOT / "scripts/security/report.py"), tmp],
                 env=env,
@@ -156,6 +162,8 @@ class Reports(unittest.TestCase):
                     FAIL_ON_ERROR=fail_error,
                     SCAN_OUTCOME=outcome,
                     FAIL_SEVERITY="HIGH",
+                    GITHUB_STEP_SUMMARY=str(p / "step-summary.md"),
+                    GITHUB_OUTPUT=str(p / "github-output"),
                 )
                 subprocess.run(
                     ["python3", str(ROOT / "scripts/security/report.py"), tmp],

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/youpi0214/github-workflows/compare/v1.1.0...v1.2.0) (2026-11-12)
+
+
+### Features
+
+* add Maven cache support, optional offline scanning, and shared ([#4](https://github.com/youpi0214/github-workflows/issues/4)) ([1d12bed](https://github.com/youpi0214/github-workflows/commit/1d12bed053110c139588199dd903dabb028a0e08))
+
 ## [1.1.0](https://github.com/youpi0214/github-workflows/compare/v1.0.0...v1.1.0) (2026-11-12)
 
 

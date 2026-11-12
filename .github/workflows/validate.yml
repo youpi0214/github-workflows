@@ -29,7 +29,8 @@ jobs:
         run: |
           curl --fail --silent --show-error --location "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o /tmp/actionlint.tar.gz
           tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
-      - run: /tmp/actionlint -shellcheck= .github/workflows/*.yml examples/security/*.yml
+      - name: Validate workflows and caller examples
+        run: /tmp/actionlint -shellcheck= .github/workflows/*.yml examples/security/*.yml
   scanner-smoke:
     runs-on: ubuntu-24.04
     steps:

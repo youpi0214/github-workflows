@@ -6,11 +6,11 @@ on:
 
 permissions:
   contents: write
-  pull_request: write
+  pull-requests: write
 
 jobs:
   security:
     uses: youpi0214/github-workflows/.github/workflows/security-scan.yml@v1.0.0
     with:
       library-ref: v1.0.0
-      failseverity: HIGH
+      fail-severity: HIGH

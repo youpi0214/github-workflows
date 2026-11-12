@@ -20,7 +20,7 @@ Library releases use [Release Please](https://github.com/googleapis/release-plea
 
 ## Security configuration
 
-Copy [the component configuration](examples/security/security-config.yaml) to `.github/security.yml` in the caller, then use [the small monorepo caller](examples/security/monorepo.yml). No inline Python or separate change-detection job is required.
+Copy [the component configuration](examples/security/configs/components.yml) to `.github/security.yml` in the caller, then use [the small monorepo caller](examples/security/security-analysis.yml). No inline Python or separate change-detection job is required.
 
 ```yaml
 jobs:

@@ -7,6 +7,8 @@ on:
         required: true
         type: string
       mode:
+        description: >-
+          Select selective to scan explicit or affected components, or full to scan the entire repository.
         type: string
         default: selective
       config-file:
@@ -22,9 +24,13 @@ on:
         type: string
         default: ""
       scanners:
+        description: >-
+          JSON array of enabled scanners; supported values are semgrep and trivy. At least one is required.
         type: string
         default: '["semgrep","trivy"]'
       semgrep-rules:
+        description: >-
+          JSON array of Semgrep CE registry rulesets or repository-relative rule files/directories.
         type: string
         default: '["p/default"]'
       maven-cache-key:
@@ -36,27 +42,43 @@ on:
         type: boolean
         default: false
       trivy-ignore-unfixed:
+        description: >-
+          Exclude dependency vulnerabilities without an available fix from Trivy results and enforcement.
         type: boolean
         default: false
       trivy-skip-dirs:
+        description: >-
+          JSON array of directories or Trivy directory patterns to exclude from scanning.
         type: string
         default: "[]"
       fail-severity:
+        description: >-
+          Fail on findings at this severity or higher. Accepts CRITICAL, HIGH, MEDIUM, LOW, INFO, UNKNOWN, or NONE.
         type: string
         default: HIGH
       enforce:
+        description: >-
+          Fail CI when findings meet fail-severity. Reports are generated first; scanner error enforcement is separate.
         type: boolean
         default: true
       fail-on-error:
+        description: >-
+          Fail CI on scanner errors or incomplete scans, independently of finding severity and enforce.
         type: boolean
         default: true
       pr-comment:
+        description: >-
+          Create or update one managed security summary comment on same-repository PRs; fork and Dependabot PRs are excluded.
         type: boolean
         default: false
       publish:
+        description: >-
+          Publish complete full-scan HTML and JSON reports to caller Releases on trusted default-branch push, scheduled, or manual runs.
         type: boolean
         default: false
       retention-days:
+        description: >-
+          Number of days to retain raw scan and unified report artifacts, subject to repository retention limits.
         type: number
         default: 30
     outputs:
@@ -66,7 +88,7 @@ on:
         value: ${{ jobs.scan.outputs.failed }}
       artifact-id:
         value: ${{ jobs.scan.outputs.artifact-id }}
-permissions: {}
+        
 jobs:
   plan:
     if: github.event_name != 'pull_request_target'
@@ -254,6 +276,7 @@ jobs:
     with:
       library-ref: ${{ inputs.library-ref }}
       artifact-id: ${{ needs.scan.outputs.artifact-id }}
+      
   enforce:
     needs: [scan, comment, publish]
     if: always()

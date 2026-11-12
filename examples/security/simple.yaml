@@ -1,0 +1,16 @@
+name: Application security
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: write
+  pull_request: write
+
+jobs:
+  security:
+    uses: youpi0214/github-workflows/.github/workflows/security-scan.yml@v1.0.0
+    with:
+      library-ref: v1.0.0
+      failseverity: HIGH

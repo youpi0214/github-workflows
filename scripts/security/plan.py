@@ -4,6 +4,11 @@ import json
 import os
 from pathlib import Path
 
+if __package__:
+    from . import selection
+else:
+    import selection
+
 SUPPORTED_SCANNERS = ("semgrep", "trivy")
 MAX_COMPONENTS = 64
 MAX_SCAN_JOBS = 256
@@ -140,6 +145,52 @@ def build_plan(components, scanners):
     return records
 
 
+def resolve_components(repository_root):
+    """Keep explicit targets compatible and resolve configuration-based selection."""
+    mode = os.environ["MODE"]
+    config_file = os.environ.get("CONFIG_FILE", "")
+    requested = os.environ.get("COMPONENTS", "")
+    raw_targets = os.environ.get("TARGETS", "")
+
+    if mode == "full":
+        return targets("[]", mode, repository_root)
+
+    if mode != "selective":
+        raise ValueError("mode must be full or selective")
+
+    if config_file and raw_targets:
+        raise ValueError("config-file and targets cannot be combined")
+
+    if requested and not config_file:
+        raise ValueError("components requires config-file")
+
+    if not config_file:
+        default_targets = '[{"name":"application","paths":["."]}]'
+        return targets(raw_targets or default_targets, mode, repository_root)
+
+    components, full_scan_paths = selection.load_config(repository_root, config_file)
+    components = targets(json.dumps(components), mode, repository_root)
+
+    files = None
+
+    if not requested:
+        files = selection.changed_files(
+            repository_root,
+            os.environ.get("SCAN_EVENT", ""),
+            os.environ.get("SCAN_BASE", ""),
+            os.environ.get("SCAN_HEAD", ""),
+        )
+
+    selected = selection.select_components(
+        components, files, full_scan_paths, requested
+    )
+
+    if selected is None:
+        return targets("[]", "full", repository_root)
+
+    return selected
+
+
 def main():
     repository_root = Path(os.environ["SOURCE"]).resolve()
     reports_directory = Path(os.environ["REPORTS"])
@@ -152,16 +203,21 @@ def main():
     validate_semgrep_rules(rules)
     validate_trivy_skip_dirs(skip_dirs)
 
-    components = targets(os.environ["TARGETS"], os.environ["MODE"], repository_root)
+    components = resolve_components(repository_root)
     records = build_plan(components, scanners)
 
     (reports_directory / "manifest.json").write_text(json.dumps(records))
     (reports_directory / "plan.json").write_text(json.dumps(components))
 
+    scan_required = bool(records)
+    selection_status = {"scan-required": scan_required}
+    (reports_directory / "selection.json").write_text(json.dumps(selection_status))
+
     matrix = json.dumps({"include": records})
 
     with open(os.environ["GITHUB_OUTPUT"], "a") as output:
         output.write(f"matrix={matrix}\n")
+        output.write(f"scan-required={str(scan_required).lower()}\n")
 
 
 if __name__ == "__main__":

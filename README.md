@@ -7,15 +7,83 @@ A modular library for CI/CD, testing, security, deployment, and repository autom
 | [security-scan.yml](.github/workflows/security-scan.yml) | Semgrep CE and Trivy, unified reports, optional PR comments, enforcement | [Security guide](docs/security/README.md) |
 | [security-publish.yml](.github/workflows/security-publish.yml) | Publish trusted full reports to caller Releases; normally invoked by security-scan | [Publication](docs/security/README.md#persistent-reports) |
 
-Start with [the simple caller](examples/security/simple.yml). Use a published version tag, such as `v1.0.0`, in both `uses` and `library-ref`. Both must select the **same release version**. The examples use `v1.0.0`; publish that release tag before using them, or select another published version. The consumer needs no scripts or reporting dependencies.
+Start with [the simple caller](examples/security/simple.yml). Use a published version tag, such as `v1.0.0`, in both `uses` and `library-ref`. Both must select the **same release version**. The basic examples use `v1.0.0`; the new configuration-based monorepo example illustrates `v1.1.0`. Publish a release containing the relevant interface before using it, and select that published version in both references. The consumer needs no scripts or reporting dependencies.
 
 Public interfaces use kebab-case inputs, JSON for structured data, and explicit policy inputs. Future categories should follow these conventions without coupling to security scripts. Version breaking interfaces with a new major release, maintain a changelog, and publish reviewed semantic tags; consumers must select reusable workflows by version number and review update PRs. Never use a commit SHA to select a reusable workflow version. Workflow source and checked-out scripts must always use the same release version. Published release tags must not be moved. YAML Action references also use explicit release version numbers. Scanner versions are fixed in `actions/security-scan/action.yml`; review them and rules/DB changes during upgrades.
 
 Custom code is limited to scan planning (`scripts/security/plan.py`) and unified reporting (`scripts/security/report.py` and the `scripts/security/reporting/` package). Scanner execution, PR comments, and Release uploads are composed from workflow steps and established Actions.
 
-Development: `python3 -m unittest discover -s tests/security -v`, then `actionlint -shellcheck= .github/workflows/*.yml examples/security/*.yml`. No Python packages are required. See the guide for limitations and operational checks before adoption.
+Development: `python3 -m unittest discover -s tests/security -v`, then `actionlint -shellcheck= .github/workflows/*.yml examples/security/*.yml`. Install `scripts/security/requirements.txt` before running the selection tests; YAML configuration uses pinned PyYAML. The reusable workflow installs it automatically when needed. See the guide for limitations and operational checks before adoption.
 
 Library releases use [Release Please](https://github.com/googleapis/release-please-action) to propose semantic versions and changelogs in a reviewable PR, then publish a version tag and GitHub Release after it merges.
+
+## Security configuration
+
+Copy [the component configuration](examples/security/security-config.yaml) to `.github/security.yml` in the caller, then use [the small monorepo caller](examples/security/monorepo.yml). No inline Python or separate change-detection job is required.
+
+```yaml
+jobs:
+  security:
+    uses: youpi0214/github-workflows/.github/workflows/security-scan.yml@v1.1.0
+    with:
+      library-ref: v1.1.0
+      config-file: .github/security.yml
+      mode: selective
+```
+
+The library defines the attributes; component names and path values belong to the caller:
+
+```yaml
+components:
+  web:
+    paths:
+      - apps/web
+    dependency-paths:
+      - pnpm-lock.yaml
+
+  mobile:
+    paths:
+      - apps/mobile
+    dependency-paths:
+      - pnpm-lock.yaml
+
+full-scan-on-change:
+  - .semgrepignore
+  - pnpm-workspace.yaml
+  - .github/workflows
+```
+
+`paths` is a required nonempty list of source files/directories. `dependency-paths` optionally extends Trivy scans to shared manifests, lockfiles, or directories. Paths are repository-relative, literal file/directory names; directory matching includes descendants but respects boundaries (`apps/web` does not match `apps/website`). Globs, absolute paths, traversal, duplicate YAML keys, and unsupported configuration attributes are rejected. All configured source and dependency targets must exist within the repository, including symlink resolution. Remove deleted components from the configuration rather than leaving stale target paths.
+
+| Input | Behavior |
+|---|---|
+| `config-file` | Read the caller's YAML component definitions |
+| `mode: selective` | Automatically select components affected by source or dependency-path changes |
+| `components: '["web","mobile"]'` | Override detection and select these configured names; requires `config-file` |
+| `components: '[]'` | Explicitly select no components |
+| `mode: full` | Scan the entire repository, ignoring component selectors and configuration |
+| `targets` | Existing JSON target interface; cannot be combined with `config-file` in selective mode |
+
+When the root lockfile changes, every component declaring it is selected. A change under `full-scan-on-change` selects a **full repository scan**, including files outside configured component paths. Changes to `config-file` itself always trigger a full scan, without requiring it in that list. Files outside declared component and trigger paths do not select a component; declare infrastructure, root manifests, and security policy paths as appropriate for your repository.
+
+For pull requests, detection uses the merge base of the PR base and head commits. Pushes compare the before/after commits. Renames consider both old and new paths, and deletions are included. The planning checkout fetches complete history. A missing/zero comparison revision, unavailable history, or unsupported event conservatively falls back to a full repository scan. Scheduled and manual audit callers should explicitly use `mode: full`.
+
+Existing change detection can supply names without duplicating path definitions:
+
+```yaml
+with:
+  library-ref: v1.1.0
+  config-file: .github/security.yml
+  components: ${{ needs.changes.outputs.components }}
+```
+
+This is an explicit override: the caller must include every affected component, including consumers of changed shared dependencies. Automatic detection and full-scan triggers are bypassed when names are supplied. Unknown names fail validation.
+
+If nothing is selected, scanner jobs are skipped and reports say **SKIPPED**, rather than claiming a clean scan. The plan, empty manifest, and `selection.json` marker record that decision; missing results from an expected scan still produce INCOMPLETE. Summaries, optional PR comments, and artifacts remain available. SKIPPED reports are not published persistently.
+
+Without `config-file`, existing explicit `targets` callers behave as before. Omitting both still scans `.` with the `application` component. The public `status` output now also supports SKIPPED, alongside CLEAN, FINDINGS, and INCOMPLETE.
+
+These configuration-based inputs require a release containing this implementation; `v1.1.0` above is an example release number, not a tag created by these changes.
 
 ## Protecting release-managed files
 

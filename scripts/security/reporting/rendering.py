@@ -72,6 +72,9 @@ def summary_markdown(data):
     for level, count in data["counts"].items():
         lines.append(f"| {level} | {count} |")
 
+    if data["status"] == "SKIPPED":
+        lines.extend(["", "No components selected; no scanners ran.", ""])
+
     lines.extend(["", "### Coverage", ""])
 
     for scan in data["scans"]:

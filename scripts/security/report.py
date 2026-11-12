@@ -29,6 +29,8 @@ def build_report(directory):
 
     if failures:
         status = "INCOMPLETE"
+    elif not scans:
+        status = "SKIPPED"
     elif findings:
         status = "FINDINGS"
     else:

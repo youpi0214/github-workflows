@@ -9,10 +9,18 @@ on:
       mode:
         type: string
         default: selective
+      config-file:
+        description: Repository-relative YAML component configuration
+        type: string
+        default: ""
+      components:
+        description: Optional JSON component-name list; overrides automatic selection
+        type: string
+        default: ""
       targets:
         description: JSON array of name, paths, and optional dependency-paths
         type: string
-        default: '[{"name":"application","paths":["."]}]'
+        default: ""
       scanners:
         type: string
         default: '["semgrep","trivy"]'
@@ -59,10 +67,12 @@ jobs:
       contents: read
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
+      scan-required: ${{ steps.plan.outputs.scan-required }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           path: source
+          fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/checkout@v7.0.1
@@ -72,11 +82,24 @@ jobs:
           path: library
           persist-credentials: false
 
+      - name: Install component configuration parser
+        if: inputs.config-file != '' && inputs.mode == 'selective'
+        run: >-
+          python3 -m pip install --disable-pip-version-check
+          --target "$RUNNER_TEMP/security-python"
+          --requirement library/scripts/security/requirements.txt
+
       - name: Validate configuration and plan scans
         id: plan
         env:
           SOURCE: ${{ github.workspace }}/source
           REPORTS: ${{ runner.temp }}/security-plan
+          PYTHONPATH: ${{ runner.temp }}/security-python
+          CONFIG_FILE: ${{ inputs.config-file }}
+          COMPONENTS: ${{ inputs.components }}
+          SCAN_EVENT: ${{ github.event_name }}
+          SCAN_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          SCAN_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           MODE: ${{ inputs.mode }}
           TARGETS: ${{ inputs.targets }}
           SCANNERS: ${{ inputs.scanners }}
@@ -95,6 +118,7 @@ jobs:
   scanners:
     name: ${{ matrix.scanner }} / ${{ matrix.component }} (${{ matrix.target }})
     needs: plan
+    if: needs.plan.outputs.scan-required == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -163,7 +187,7 @@ jobs:
         id: report
         if: always()
         env:
-          SCAN_OUTCOME: ${{ needs.plan.result == 'success' && needs.scanners.result == 'success' && 'success' || 'failure' }}
+          SCAN_OUTCOME: ${{ needs.plan.result == 'success' && (needs.scanners.result == 'success' || (needs.scanners.result == 'skipped' && needs.plan.outputs.scan-required == 'false')) && 'success' || 'failure' }}
           FAIL_SEVERITY: ${{ inputs.fail-severity }}
           ENFORCE: ${{ inputs.enforce }}
           FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
@@ -211,7 +235,7 @@ jobs:
     needs: scan
     if: >-
       always() && inputs.publish && inputs.mode == 'full' &&
-      needs.scan.outputs.status != 'INCOMPLETE' && needs.scan.outputs.status != '' &&
+      (needs.scan.outputs.status == 'CLEAN' || needs.scan.outputs.status == 'FINDINGS') &&
       github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     uses: ./.github/workflows/security-publish.yml

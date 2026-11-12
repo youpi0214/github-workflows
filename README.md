@@ -1,4 +1,13 @@
-# Reusable GitHub workflows
+<h1 align="center">Reusable GitHub workflows</h1>
+
+<p align="center">
+  <a href="https://github.com/youpi0214/github-workflows/releases/latest">
+    <img src="https://img.shields.io/github/v/release/youpi0214/github-workflows?sort=semver&amp;filter=v%2A&amp;label=version" alt="Latest version">
+  </a>
+  <a href="https://github.com/youpi0214/github-workflows/actions/workflows/validate.yml">
+    <img src="https://github.com/youpi0214/github-workflows/actions/workflows/validate.yml/badge.svg?branch=master&amp;event=push" alt="Tests">
+  </a>
+</p>
 
 Shared GitHub Actions workflows for software projects and monorepos. The security toolkit combines Semgrep Community Edition and Trivy with an offline HTML dashboard, Actions summaries, and optional PR comments and persistent reports. Maven preparation is available as a companion workflow.
 

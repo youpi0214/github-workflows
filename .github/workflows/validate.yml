@@ -63,6 +63,29 @@ jobs:
           reports: ${{ runner.temp }}/smoke-reports
           scope: '{"scanner":"trivy","target":".","file":"1.json"}'
 
+      - name: Prepare a controlled Maven cache
+        run: |
+          mkdir -p "$HOME/.m2/repository/security-library-smoke"
+          echo 'cached fixture' > "$HOME/.m2/repository/security-library-smoke/cache-marker.txt"
+
+      - name: Save controlled Maven dependencies
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ~/.m2/repository
+          key: maven-smoke-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Remove local marker to verify restoration
+        run: rm "$HOME/.m2/repository/security-library-smoke/cache-marker.txt"
+
+      - name: Exercise Maven cache restoration and offline Trivy
+        uses: ./actions/security-scan
+        with:
+          source: ${{ runner.temp }}/fixture
+          reports: ${{ runner.temp }}/smoke-reports
+          scope: '{"scanner":"trivy","target":".","file":"2.json"}'
+          maven-cache-key: maven-smoke-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          trivy-offline-scan: "true"
+
       - name: Check scanner outcomes and unified reporting
         env:
           REPORTS: ${{ runner.temp }}/smoke-reports
@@ -74,7 +97,7 @@ jobs:
           reports = Path(os.environ['REPORTS'])
           records = [
               dict(scanner=scanner, component='repository', target='.', file=f'{index}.json', exit_code=-1)
-              for index, scanner in enumerate(['semgrep', 'trivy'])
+              for index, scanner in enumerate(['semgrep', 'trivy', 'trivy'])
           ]
           (reports / 'manifest.json').write_text(json.dumps(records))
           PYTHON
@@ -88,6 +111,7 @@ jobs:
           from pathlib import Path
 
           report = json.loads((Path(os.environ['REPORTS']) / 'report.json').read_text())
+          assert (Path.home() / '.m2/repository/security-library-smoke/cache-marker.txt').read_text().strip() == 'cached fixture'
           assert not report['failures'], report['failures']
           assert any(f['id'] == 'test-eval' for f in report['findings']), report
           assert any(f['scanner'] == 'trivy' for f in report['findings']), report

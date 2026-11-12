@@ -5,6 +5,23 @@ import json
 from .findings import SEVERITIES, normalize
 
 
+def scan_components(record):
+    """Read shared scope owners while accepting legacy single-component records."""
+    if "components" not in record:
+        return [record["component"]]
+
+    components = record["components"]
+
+    if (
+        not isinstance(components, list)
+        or not components
+        or any(not isinstance(name, str) or not name for name in components)
+    ):
+        raise ValueError("scan components must be a nonempty string list")
+
+    return list(dict.fromkeys(components))
+
+
 def load_scan(directory, record):
     """Load one successful scan, rejecting missing results and unsafe filenames."""
     result_file = directory / record["file"]
@@ -23,10 +40,12 @@ def load_scan(directory, record):
     if exit_code != 0:
         raise ValueError("scanner process failed or result missing: " + str(exit_code))
 
+    components = scan_components(record)
+
     findings, errors = normalize(
         record["scanner"],
         json.loads(result_file.read_text()),
-        record["component"],
+        components[0],
         record["target"],
     )
 
@@ -36,7 +55,15 @@ def load_scan(directory, record):
         for finding in findings:
             finding["location"] = finding["location"].removeprefix(prefix)
 
-    return findings, errors
+    # Preserve the existing one-component-per-finding report format. The raw
+    # scanner runs once; each declared consumer receives its own attribution.
+    attributed_findings = [
+        dict(finding, component=component)
+        for component in components
+        for finding in findings
+    ]
+
+    return attributed_findings, errors
 
 
 def aggregate(directory):
@@ -68,22 +95,32 @@ def aggregate(directory):
             failures.append("Malformed scan manifest entry")
             continue
 
-        scans.append(
-            {field: record.get(field) for field in ("scanner", "component", "target")}
-        )
+        component_label = str(record.get("component"))
 
         try:
+            components = scan_components(record)
+            component_label = ", ".join(str(name) for name in components)
+
+            scans.extend(
+                {
+                    "scanner": record.get("scanner"),
+                    "component": component,
+                    "target": record.get("target"),
+                }
+                for component in components
+            )
+
             scan_findings, errors = load_scan(directory, record)
             findings.extend(scan_findings)
 
             if errors:
                 failures.append(
-                    f"{record['scanner']}/{record['component']}: "
+                    f"{record['scanner']}/{component_label}: "
                     f"{len(errors)} scanner errors (see raw JSON)"
                 )
 
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
-            failures.append(f"{record.get('scanner')}/{record.get('component')}: {exc}")
+            failures.append(f"{record.get('scanner')}/{component_label}: {exc}")
 
     unique_findings = {
         json.dumps(finding, sort_keys=True): finding for finding in findings

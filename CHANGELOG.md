@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/youpi0214/github-workflows/compare/v1.2.0...v1.3.0) (2026-11-12)
+
+
+### Features
+
+* support for maven caching ([#7](https://github.com/youpi0214/github-workflows/issues/7)) ([6ed409d](https://github.com/youpi0214/github-workflows/commit/6ed409ddc6de4a1a8c79004ce93e1ed7cb78d985))
+
 ## [1.2.0](https://github.com/youpi0214/github-workflows/compare/v1.1.0...v1.2.0) (2026-11-12)
 
 

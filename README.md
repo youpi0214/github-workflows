@@ -121,6 +121,19 @@ Identical Trivy targets shared by components are scanned once, including equival
 
 The scanner smoke workflow exercises both the default online path and an offline scan with restoration of a controlled Maven cache. It does not prove completeness of a consumer project's Maven dependency tree.
 
+## Persistent security report names
+
+Trusted full audits publish a historical snapshot and update a stable latest-report release:
+
+| Purpose | Release title | Tag |
+|---|---|---|
+| History | `Security audit — 2026-11-12 08:15:30 UTC` | `security-report-2026-11-12T08-15-30Z` |
+| Latest | `Security audit — latest report` | `security-report-latest` |
+
+The timestamp is generated once at publication time in UTC. `Z` means UTC; hyphens replace colons in tag timestamps because Git references cannot contain colons. Release descriptions include publication time, the scanned branch and source revision, workflow run link, and attempt number. The latest report links to its historical snapshot.
+
+Historical tags are checked for collisions before publication and their assets are not overwritten. If a tag already exists for the same second, publication fails explicitly; rerun to generate a fresh timestamp. Earlier run-ID-based report releases remain untouched. The fixed latest-report tag and replaceable assets remain stable for consumers. Both report releases retain `make_latest: false` to avoid promoting them over normal software releases; GitHub's separate Latest badge is not part of either title.
+
 ## Protecting release-managed files
 
 The `Release-managed files` PR check rejects changes to `.release-please-manifest.json` and `version.txt` unless the PR belongs to the configured release account, comes from this repository's expected Release Please branch, and its head commit is attributed to that account. Renaming a managed file is also checked. Manual changelog corrections and release configuration updates remain allowed.

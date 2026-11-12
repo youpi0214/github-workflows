@@ -5,8 +5,6 @@ on:
     branches: [master]
   workflow_dispatch:
 
-permissions: {}
-
 concurrency:
   group: release-library-${{ github.repository }}
   cancel-in-progress: false

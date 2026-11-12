@@ -2,6 +2,10 @@ name: Security scan
 on:
   workflow_call:
     inputs:
+      runner:
+        description: Linux runner label used for jobs; defaults to the existing GitHub-hosted runner
+        type: string
+        default: ubuntu-24.04
       library-ref:
         description: Release version tag of github-workflows; match the workflow uses version
         required: true
@@ -92,7 +96,7 @@ on:
 jobs:
   plan:
     if: github.event_name != 'pull_request_target'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner }}
     permissions:
       contents: read
     outputs:
@@ -149,7 +153,7 @@ jobs:
     name: ${{ matrix.scanner }} / ${{ join(matrix.components, ', ') }} (${{ matrix.target }})
     needs: plan
     if: needs.plan.outputs.scan-required == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner }}
     permissions:
       contents: read
     strategy:
@@ -193,7 +197,7 @@ jobs:
   scan:
     needs: [plan, scanners]
     if: always() && github.event_name != 'pull_request_target'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner }}
     permissions:
       contents: read
     outputs:
@@ -244,7 +248,7 @@ jobs:
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner }}
     permissions:
       contents: read
       pull-requests: write
@@ -274,13 +278,14 @@ jobs:
     permissions:
       contents: write
     with:
+      runner: ${{ inputs.runner }}
       library-ref: ${{ inputs.library-ref }}
       artifact-id: ${{ needs.scan.outputs.artifact-id }}
       
   enforce:
     needs: [scan, comment, publish]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner }}
     permissions: {}
     steps:
       - name: Enforce security policy after reporting

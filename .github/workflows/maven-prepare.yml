@@ -3,6 +3,10 @@ name: Prepare Maven dependencies
 on:
   workflow_call:
     inputs:
+      runner:
+        description: Linux runner label used for jobs; defaults to the existing GitHub-hosted runner
+        type: string
+        default: ubuntu-24.04
       library-ref:
         description: Release version tag matching the workflow uses version
         required: true
@@ -42,7 +46,7 @@ on:
 jobs:
   prepare:
     if: github.event_name != 'pull_request_target'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 60
     permissions:
       contents: read

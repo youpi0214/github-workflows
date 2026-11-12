@@ -42,6 +42,7 @@ Adapt the POM paths to the caller and use the same published version in workflow
 
 | Input | Type | Default | Description |
 |---|---|---|---|
+| `runner` | string | `ubuntu-24.04` | Single Linux runner label used for jobs. |
 | `library-ref` | string | **Required** | Library version tag matching the workflow reference. |
 | `pom-files` | string | **Required** | Newline-separated explicit POM entry points, in preparation order. List each reactor root once. |
 | `java-version` | string | `21` | Java version accepted by setup-java. |
@@ -57,6 +58,23 @@ Adapt the POM paths to the caller and use the same published version in workflow
 | `cache-key` | Exact saved `~/.m2/repository` cache key. Exposed only after every project succeeds and the saved entry is verified available. |
 
 Use `needs` to wait for preparation and pass this key to `maven-cache-key`. Ordering alone does not transfer files between jobs; the scanner explicitly restores the cache. If preparation fails, dependent jobs normally do not run.
+
+## Runner selection
+
+Preparation defaults to `ubuntu-24.04`. Override it with a single Linux runner label:
+
+```yaml
+with:
+  library-ref: v1.3.0
+  pom-files: apps/api/pom.xml
+  runner: my-linux-runner
+```
+
+The runner must be available to the calling repository and provide Bash, Git, Python 3, the standard `mvn` executable, network access, and archive/cache tooling compatible with the pinned Actions. `setup-java` installs the requested JDK; it does not install Maven. The existing Linux implementation does not support Windows or macOS, and the input does not accept label arrays or runner-group objects.
+
+The security workflow has its own `runner` input; Maven's choice is not automatically inherited by another reusable workflow call. Keep runner OS/architecture and cache compression tooling compatible across preparation and scanning. Cache keys include the preparation runner OS, and GitHub also versions caches according to their paths/compression.
+
+This workflow executes project plugins and extensions. Use isolated, ephemeral runners for untrusted PR builds rather than persistent machines also used by privileged jobs.
 
 ## Permissions
 
@@ -99,7 +117,7 @@ pom-files: |
 
 List only the reactor root. Maven discovers declared modules and builds them in dependency order. A parent used only for inheritance does not discover child projects unless it also declares them in `<modules>`.
 
-POM paths must be existing files inside the caller repository. Absolute paths and symlink escapes are rejected. The maximum is 64 entry points. Preparation uses the hosted runner's standard `mvn` executable, not project wrappers.
+POM paths must be existing files inside the caller repository. Absolute paths and symlink escapes are rejected. The maximum is 64 entry points. Preparation uses the selected runner's standard `mvn` executable, not project wrappers.
 
 ## Goals, profiles, and tests
 

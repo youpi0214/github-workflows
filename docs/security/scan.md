@@ -34,6 +34,7 @@ JSON inputs are YAML strings containing JSON arrays.
 
 | Input | Type | Default | Description |
 |---|---|---|---|
+| `runner` | string | `ubuntu-24.04` | Single Linux runner label used for jobs. |
 | `library-ref` | string | **Required** | Library version tag matching the workflow reference. |
 | `mode` | string | `selective` | `selective` selects scopes; `full` scans the complete repository. |
 | `config-file` | string | `""` | Repository-relative component YAML file. Enables automatic selection in selective mode. |
@@ -61,6 +62,22 @@ JSON inputs are YAML strings containing JSON arrays.
 | `artifact-id` | ID of the combined `security-report` artifact from this run. |
 
 Infrastructure failures can prevent outputs or reports from being created. Final enforcement fails when the report job fails or produces no status.
+
+## Runner selection
+
+All jobs default to `ubuntu-24.04`. Set `runner` to another Linux runner label:
+
+```yaml
+with:
+  library-ref: v1.3.0
+  runner: my-linux-runner
+```
+
+The same label is used for planning, scanner matrix jobs, reporting, commenting, enforcement, and nested publication. Set the input on the reusable workflow call; a caller job using `uses` does not also declare `runs-on`. The input accepts a single label, not JSON arrays or runner-group objects. The runner must be available to the calling repository.
+
+Custom scan runners need Bash, Git, Python 3 with pip, jq, coreutils (`timeout` and `realpath`), Docker with daemon access, and network access to GitHub and scanner registries/databases/rulesets. The runner agent and archive/cache tools must support the pinned Actions. Windows and macOS are not supported by this implementation.
+
+Use isolated, ephemeral runners for untrusted PRs. Persistent self-hosted machines can retain modified files/processes between build/scan jobs and privileged reporting jobs; job-level token permissions do not isolate the machine itself. Keep preparation and scanner runners compatible when sharing Maven caches; see [Maven runner selection](../maven/prepare.md#runner-selection).
 
 ## Permissions
 
@@ -202,4 +219,4 @@ Severity order is `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`, `UNKNOWN`. The th
 | Permission error before jobs start | Allow the permissions declared by the called workflow; organization/fork policy may restrict them. |
 | No report after cancellation or checkout failure | Infrastructure/cancellation can prevent reporting; job logs are the fallback. |
 
-Use one security-scan invocation per workflow run: artifact names are fixed. This implementation targets GitHub.com-hosted Ubuntu runners; GHES and arbitrary self-hosted runners are not covered. Scanner/ruleset exclusions and ecosystem limits still apply; a successful scan does not guarantee every file/dependency was analyzed.
+Use one security-scan invocation per workflow run: artifact names are fixed. The default targets GitHub.com-hosted Ubuntu runners; custom Linux runners must meet the requirements above. GHES is not covered. Scanner/ruleset exclusions and ecosystem limits still apply; a successful scan does not guarantee every file/dependency was analyzed.

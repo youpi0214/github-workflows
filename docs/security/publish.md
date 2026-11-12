@@ -50,12 +50,26 @@ The artifact must belong to the same workflow run and contain `index.html` and n
 
 | Input | Type | Default | Description |
 |---|---|---|---|
+| `runner` | string | `ubuntu-24.04` | Single Linux runner label used for jobs. |
 | `library-ref` | string | **Required** | Version tag matching the workflow reference. Retained for interface compatibility; the publisher no longer checks out library scripts. |
 | `artifact-id` | string | **Required** | Current-run report artifact ID to download. |
 
 ## Outputs
 
 No workflow outputs are exposed. The result is a historical GitHub Release and updated latest-report assets in the caller repository.
+
+## Runner selection
+
+The default is `ubuntu-24.04`. When publication is enabled through `security-scan.yml`, its `runner` input is forwarded automatically. Direct callers can set the same input on `security-publish.yml`:
+
+```yaml
+with:
+  library-ref: v1.3.0
+  artifact-id: ${{ needs.audit.outputs.artifact-id }}
+  runner: my-linux-runner
+```
+
+Use a single Linux label available to the caller repository. The publisher needs Python 3, Bash, GitHub network access, and a runner agent supporting the pinned Actions. It does not need Docker or Maven. Use a clean, isolated machine for this contents-write job; avoid persistent runners previously used to execute untrusted PR builds.
 
 ## Permissions
 

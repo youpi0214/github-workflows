@@ -208,6 +208,7 @@ class SelectionTests(unittest.TestCase):
                         SCAN_BASE=base,
                         SCAN_HEAD=head,
                         GITHUB_OUTPUT=str(root / "outputs"),
+                        GITHUB_STEP_SUMMARY=str(root / "step-summary.md"),
                     )
                     subprocess.run(
                         ["python3", str(ROOT / "scripts/security/plan.py")],
@@ -243,6 +244,7 @@ class SelectionTests(unittest.TestCase):
                 SCANNERS='["semgrep","trivy"]',
                 SEMGREP_RULES='["p/default"]',
                 GITHUB_OUTPUT=str(output),
+                GITHUB_STEP_SUMMARY=str(root / "step-summary.md"),
                 SCAN_OUTCOME="success",
                 FAIL_SEVERITY="HIGH",
                 ENFORCE="true",

@@ -79,7 +79,9 @@ jobs:
           (reports / 'manifest.json').write_text(json.dumps(records))
           PYTHON
 
-          python3 scripts/security/report.py "$REPORTS"
+          GITHUB_STEP_SUMMARY="$REPORTS/step-summary.md" \
+          GITHUB_OUTPUT="$REPORTS/github-output" \
+            python3 scripts/security/report.py "$REPORTS"
 
           python3 - <<'PYTHON'
           import json, os

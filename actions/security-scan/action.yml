@@ -14,6 +14,12 @@ inputs:
   semgrep-rules:
     default: '["p/default"]'
     description: JSON ruleset list
+  maven-cache-key:
+    default: ""
+    description: Caller-created Maven repository cache key; empty disables restoration
+  trivy-offline-scan:
+    default: "false"
+    description: Resolve dependencies without remote package-repository requests
   trivy-ignore-unfixed:
     default: "false"
     description: Exclude vulnerabilities without fixes
@@ -62,6 +68,24 @@ runs:
           --oss-only --metrics=off --disable-version-check --json \
           "${args[@]}" -- "$TARGET" > "$REPORTS/$FILE" 2> "$REPORTS/$FILE.log"
 
+    - name: Restore caller Maven dependencies
+      id: maven-cache
+      if: fromJSON(inputs.scope).scanner == 'trivy' && inputs.maven-cache-key != ''
+      uses: actions/cache/restore@v6.1.0
+      with:
+        path: ~/.m2/repository
+        key: ${{ inputs.maven-cache-key }}
+        fail-on-cache-miss: ${{ inputs.trivy-offline-scan }}
+
+    - name: Require an exact Maven cache for offline scanning
+      if: >-
+        fromJSON(inputs.scope).scanner == 'trivy' && inputs.maven-cache-key != '' &&
+        inputs.trivy-offline-scan == 'true' && steps.maven-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        echo "::error::Offline Maven scanning requires the exact caller-prepared cache key."
+        exit 1
+
     - name: Trivy vulnerabilities and misconfigurations
       id: trivy
       if: fromJSON(inputs.scope).scanner == 'trivy'
@@ -69,6 +93,7 @@ runs:
       uses: aquasecurity/trivy-action@v0.36.0
       env:
         TRIVY_IGNOREFILE: /dev/null
+        TRIVY_OFFLINE_SCAN: ${{ inputs.trivy-offline-scan }}
       with:
         version: v0.76.2
         scan-type: fs

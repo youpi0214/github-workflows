@@ -27,6 +27,14 @@ on:
       semgrep-rules:
         type: string
         default: '["p/default"]'
+      maven-cache-key:
+        description: Optional caller-created cache key for ~/.m2/repository
+        type: string
+        default: ""
+      trivy-offline-scan:
+        description: Resolve dependencies locally; requires a populated cache for complete Maven coverage
+        type: boolean
+        default: false
       trivy-ignore-unfixed:
         type: boolean
         default: false
@@ -116,7 +124,7 @@ jobs:
           overwrite: true
 
   scanners:
-    name: ${{ matrix.scanner }} / ${{ matrix.component }} (${{ matrix.target }})
+    name: ${{ matrix.scanner }} / ${{ join(matrix.components, ', ') }} (${{ matrix.target }})
     needs: plan
     if: needs.plan.outputs.scan-required == 'true'
     runs-on: ubuntu-24.04
@@ -144,6 +152,8 @@ jobs:
           scope: ${{ toJSON(matrix) }}
           reports: ${{ runner.temp }}/security-raw
           semgrep-rules: ${{ inputs.semgrep-rules }}
+          maven-cache-key: ${{ inputs.maven-cache-key }}
+          trivy-offline-scan: ${{ inputs.trivy-offline-scan }}
           trivy-ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
           trivy-skip-dirs: ${{ inputs.trivy-skip-dirs }}
 

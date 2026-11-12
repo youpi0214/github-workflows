@@ -2,7 +2,7 @@
 
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 if __package__:
     from . import selection
@@ -118,6 +118,7 @@ def build_plan(components, scanners):
     """Record every expected scan so missing matrix artifacts fail closed."""
     records = []
     unique_scanners = dict.fromkeys(scanners)
+    trivy_targets = {}
 
     for component in components:
         for scanner in unique_scanners:
@@ -127,17 +128,31 @@ def build_plan(components, scanners):
                 paths = paths + component.get("dependency-paths", [])
 
             for target in dict.fromkeys(paths):
+                target_key = PurePosixPath(target).as_posix()
+
+                if scanner == "trivy" and target_key in trivy_targets:
+                    shared_record = trivy_targets[target_key]
+
+                    if component["name"] not in shared_record["components"]:
+                        shared_record["components"].append(component["name"])
+
+                    continue
+
                 scan_id = len(records)
                 record = {
                     "id": scan_id,
                     "scanner": scanner,
                     "component": component["name"],
+                    "components": [component["name"]],
                     "target": target,
                     "file": f"{scan_id}.json",
                     "path-prefix": "source/" if scanner == "trivy" else "",
                     "exit_code": -1,
                 }
                 records.append(record)
+
+                if scanner == "trivy":
+                    trivy_targets[target_key] = record
 
     if len(records) > MAX_SCAN_JOBS:
         raise ValueError(f"scan plan exceeds GitHub's {MAX_SCAN_JOBS}-job matrix limit")

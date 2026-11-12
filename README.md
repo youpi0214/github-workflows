@@ -85,6 +85,41 @@ Without `config-file`, existing explicit `targets` callers behave as before. Omi
 
 These configuration-based inputs require a release containing this implementation; `v1.1.0` above is an example release number, not a tag created by these changes.
 
+## Maven dependency caching and offline scanning
+
+The reusable scan accepts two optional inputs:
+
+| Input | Default | Behavior |
+|---|---|---|
+| `maven-cache-key` | empty | Restore the caller's cached `~/.m2/repository` before each Trivy scan; no Maven restoration when omitted |
+| `trivy-offline-scan` | `false` | Set Trivy's `TRIVY_OFFLINE_SCAN` to disable remote dependency-resolution requests |
+
+See [the Maven caller example](examples/security/maven.yml). Its build job sets up Java, restores dependencies, resolves Maven dependencies, and saves the repository cache after success. The security job uses `needs` to wait for that job and passes its exact cache key:
+
+```yaml
+security:
+  needs: backend-build
+  uses: youpi0214/github-workflows/.github/workflows/security-scan.yml@v1.1.0
+  with:
+    library-ref: v1.1.0
+    maven-cache-key: ${{ needs.backend-build.outputs.maven-cache-key }}
+    trivy-offline-scan: false
+```
+
+Use an actual published version containing these inputs in both references. An existing Maven build can populate the cache instead of a separate preparation command. Adapt the example's POM path to the project or parent reactor, and include relevant POMs and resolution-affecting profiles/properties in the cache key. Builds and Maven plugins execute only in the caller's build job; the reusable scanner does not execute them. Cache only `~/.m2/repository`, not credential-bearing `settings.xml` files.
+
+Maven caches are scoped by GitHub's cache access rules and must be available to the scanner's branch/PR. Matching the key alone does not transfer files between jobs: the library restores them through `actions/cache/restore`. It does not save or modify the caller's cache entry. The Trivy database cache remains separate and is still managed by the Trivy Action.
+
+With online scanning (the default), a missing Maven cache permits remote resolution and may still encounter Maven Central HTTP 429. Restore a populated cache to reduce remote requests; after a rate limit, respect the server's `Retry-After` delay rather than immediately retrying.
+
+Enable offline scanning only after confirming the Maven cache contains the complete required dependency metadata. When `maven-cache-key` is supplied, offline mode requires an exact cache hit and fails on a miss or prefix-only match. This checks cache availability, not dependency-tree completeness: Trivy can silently skip transitive dependencies whose POMs are absent. An offline scan without a Maven cache key is permitted for other ecosystems, but should not be used for an unprepared Maven project. Offline dependency resolution does not disable vulnerability database updates. See [Trivy's Java documentation](https://www.trivy.dev/docs/latest/guide/coverage/language/java/).
+
+GitHub cache entries are immutable. If an existing entry lacks required metadata, populate dependencies and save under a new key rather than expecting a cache hit to overwrite it.
+
+Identical Trivy targets shared by components are scanned once, including equivalent `./` path spellings. The manifest records all associated `components`, while preserving the first `component` field for compatibility. Findings and coverage retain one entry per affected component, so overall finding totals include component attributions rather than counting unique advisories globally. Failures name all affected components. Semgrep scopes and different nested/overlapping directory targets remain independent; only identical Trivy targets are deduplicated.
+
+The scanner smoke workflow exercises both the default online path and an offline scan with restoration of a controlled Maven cache. It does not prove completeness of a consumer project's Maven dependency tree.
+
 ## Protecting release-managed files
 
 The `Release-managed files` PR check rejects changes to `.release-please-manifest.json` and `version.txt` unless the PR belongs to the configured release account, comes from this repository's expected Release Please branch, and its head commit is attributed to that account. Renaming a managed file is also checked. Manual changelog corrections and release configuration updates remain allowed.

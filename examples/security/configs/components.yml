@@ -3,7 +3,7 @@
 components:
   api:
     paths:
-      - services/api
+      - apps/api
   web:
     paths:
       - apps/web
@@ -23,6 +23,6 @@ components:
       - .github
 
 full-scan-on-change:
-  - .github/security.yml
+  - .github/components.yml
   - .semgrepignore
   - pnpm-workspace.yaml

@@ -39,7 +39,7 @@ jobs:
     with:
       library-ref: v1.3.0
       mode: selective
-      config-file: .github/components.yml # necessary only for monorepos
+      config-file: .github/components.yml # enables automatic component selection
       scanners: '["semgrep","trivy"]'
       semgrep-rules: '["p/default"]'
       maven-cache-key: ${{ needs.prepare-maven.outputs.cache-key }}

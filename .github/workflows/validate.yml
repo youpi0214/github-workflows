@@ -21,6 +21,7 @@ jobs:
       - run: python3 -m unittest discover -s tests/security -v
         env:
           PYTHONPATH: ${{ runner.temp }}/security-python
+      - run: python3 -m unittest discover -s tests/maven -v
       - run: node --test tests/releases/*.test.cjs
       - name: Install pinned actionlint
         env:
@@ -126,3 +127,40 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
           overwrite: true
+
+  maven-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Plan reactor and independent-project preparation
+        env:
+          SOURCE: ${{ github.workspace }}
+          MAVEN_PLAN: ${{ runner.temp }}/maven-plan.json
+          POM_FILES: |
+            tests/maven/fixtures/reactor/pom.xml
+            tests/maven/fixtures/independent/pom.xml
+          JAVA_VERSION: "21"
+          JAVA_DISTRIBUTION: temurin
+          MAVEN_GOALS: install
+          SKIP_TESTS: "true"
+        run: python3 scripts/maven/prepare.py plan
+
+      - name: Prepare reactor sibling modules and independent project
+        env:
+          SOURCE: ${{ github.workspace }}
+          MAVEN_PLAN: ${{ runner.temp }}/maven-plan.json
+        run: python3 scripts/maven/prepare.py run
+
+      - name: Check installed artifacts
+        run: |
+          test -f "$HOME/.m2/repository/example/workflow/fixture/library/1.0.0-SNAPSHOT/library-1.0.0-SNAPSHOT.jar"
+          test -f "$HOME/.m2/repository/example/workflow/fixture/app/1.0.0-SNAPSHOT/app-1.0.0-SNAPSHOT.jar"
+          test -f "$HOME/.m2/repository/example/workflow/fixture/independent/1.0.0/independent-1.0.0.pom"

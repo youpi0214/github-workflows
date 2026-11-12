@@ -1,0 +1,122 @@
+name: Prepare Maven dependencies
+
+on:
+  workflow_call:
+    inputs:
+      library-ref:
+        description: Release version tag matching the workflow uses version
+        required: true
+        type: string
+      pom-files:
+        description: Newline-separated Maven entry points; list each reactor root once
+        required: true
+        type: string
+      java-version:
+        type: string
+        default: "21"
+      java-distribution:
+        type: string
+        default: temurin
+      maven-goals:
+        description: >-
+          Maven phases or goals to run. Defaults to install, which builds projects
+          and installs their artifacts locally so dependent modules can resolve them.
+          Use dependency:resolve when no locally built artifacts are required.
+        type: string
+        default: install
+      profiles:
+        description: Optional comma/whitespace-separated enabled Maven profiles
+        type: string
+        default: ""
+      skip-tests:
+        description: >-
+          Skip test execution during Maven preparation. Test sources are still
+          compiled. Set to true to prevent tests from running.
+        type: boolean
+        default: false
+    outputs:
+      cache-key:
+        description: Saved Maven repository cache key for a downstream scanner job
+        value: ${{ jobs.prepare.outputs.cache-key }}
+
+jobs:
+  prepare:
+    if: github.event_name != 'pull_request_target'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      cache-key: ${{ steps.publish.outputs.cache-key }}
+    env:
+      SOURCE: ${{ github.workspace }}/source
+      MAVEN_PLAN: ${{ github.workspace }}/maven-prepare/plan.json
+    steps:
+      - name: Check out caller source
+        uses: actions/checkout@v7.0.1
+        with:
+          path: source
+          persist-credentials: false
+
+      - name: Check out preparation implementation
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: youpi0214/github-workflows
+          ref: ${{ inputs.library-ref }}
+          path: library
+          persist-credentials: false
+
+      - name: Validate configuration and compute cache keys
+        id: plan
+        env:
+          POM_FILES: ${{ inputs.pom-files }}
+          JAVA_VERSION: ${{ inputs.java-version }}
+          JAVA_DISTRIBUTION: ${{ inputs.java-distribution }}
+          MAVEN_GOALS: ${{ inputs.maven-goals }}
+          MAVEN_PROFILES: ${{ inputs.profiles }}
+          SKIP_TESTS: ${{ inputs.skip-tests }}
+        run: python3 library/scripts/maven/prepare.py plan
+
+      - name: Set up Java
+        uses: actions/setup-java@v6.2.0
+        with:
+          distribution: ${{ inputs.java-distribution }}
+          java-version: ${{ inputs.java-version }}
+
+      - name: Restore previous Maven dependencies
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.m2/repository
+          key: ${{ steps.plan.outputs.cache-key }}
+          restore-keys: ${{ steps.plan.outputs.restore-prefix }}
+
+      - name: Prepare all Maven projects
+        run: python3 library/scripts/maven/prepare.py run
+
+      - name: Save freshly prepared Maven repository
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ~/.m2/repository
+          key: ${{ steps.plan.outputs.cache-key }}
+
+      - name: Verify saved cache is available
+        id: verify
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.m2/repository
+          key: ${{ steps.plan.outputs.cache-key }}
+          lookup-only: true
+          fail-on-cache-miss: true
+
+      - name: Expose the prepared cache key
+        id: publish
+        env:
+          CACHE_HIT: ${{ steps.verify.outputs.cache-hit }}
+          CACHE_KEY: ${{ steps.plan.outputs.cache-key }}
+        run: |
+          if [ "$CACHE_HIT" != true ]; then
+            echo '::error::The freshly prepared Maven cache was not saved successfully.'
+            exit 1
+          fi
+
+          echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"

@@ -6,14 +6,15 @@ A modular library for CI/CD, testing, security, deployment, and repository autom
 |---|---|---|
 | [security-scan.yml](.github/workflows/security-scan.yml) | Semgrep CE and Trivy, unified reports, optional PR comments, enforcement | [Security guide](docs/security/README.md) |
 | [security-publish.yml](.github/workflows/security-publish.yml) | Publish trusted full reports to caller Releases; normally invoked by security-scan | [Publication](docs/security/README.md#persistent-reports) |
+| [maven-prepare.yml](.github/workflows/maven-prepare.yml) | Prepare independent Maven projects or multi-module reactors and expose a dependency cache | [Maven guide](docs/maven/README.md) |
 
-Start with [the simple caller](examples/security/simple.yml). Use a published version tag, such as `v1.0.0`, in both `uses` and `library-ref`. Both must select the **same release version**. The basic examples use `v1.0.0`; the new configuration-based monorepo example illustrates `v1.1.0`. Publish a release containing the relevant interface before using it, and select that published version in both references. The consumer needs no scripts or reporting dependencies.
+Start with [the simple caller](examples/security/simple.yml). Use a published version tag, such as `v1.0.0`, in both `uses` and `library-ref`. Both must select the **same release version**. The basic examples use `v1.0.0`; the configuration-based monorepo example illustrates `v1.1.0`, and the Maven preparation example illustrates `v1.2.0`. Publish a release containing the relevant interface before using it, and select that published version in both references. The consumer needs no scripts or reporting dependencies.
 
 Public interfaces use kebab-case inputs, JSON for structured data, and explicit policy inputs. Future categories should follow these conventions without coupling to security scripts. Version breaking interfaces with a new major release, maintain a changelog, and publish reviewed semantic tags; consumers must select reusable workflows by version number and review update PRs. Never use a commit SHA to select a reusable workflow version. Workflow source and checked-out scripts must always use the same release version. Published release tags must not be moved. YAML Action references also use explicit release version numbers. Scanner versions are fixed in `actions/security-scan/action.yml`; review them and rules/DB changes during upgrades.
 
-Custom code is limited to scan planning (`scripts/security/plan.py`) and unified reporting (`scripts/security/report.py` and the `scripts/security/reporting/` package). Scanner execution, PR comments, and Release uploads are composed from workflow steps and established Actions.
+Maven preparation uses `scripts/maven/prepare.py` to validate inputs, compute cache identity, and invoke Maven safely. Security-specific custom code is limited to scan planning (`scripts/security/plan.py`) and unified reporting (`scripts/security/report.py` and the `scripts/security/reporting/` package). Scanner execution, PR comments, and Release uploads are composed from workflow steps and established Actions.
 
-Development: `python3 -m unittest discover -s tests/security -v`, then `actionlint -shellcheck= .github/workflows/*.yml examples/security/*.yml`. Install `scripts/security/requirements.txt` before running the selection tests; YAML configuration uses pinned PyYAML. The reusable workflow installs it automatically when needed. See the guide for limitations and operational checks before adoption.
+Development: `python3 -m unittest discover -s tests/security -v`, `python3 -m unittest discover -s tests/maven -v`, then `actionlint -shellcheck= .github/workflows/*.yml examples/security/*.yml`. Install `scripts/security/requirements.txt` before running the selection tests; YAML configuration uses pinned PyYAML. The reusable workflow installs it automatically when needed. See the guide for limitations and operational checks before adoption.
 
 Library releases use [Release Please](https://github.com/googleapis/release-please-action) to propose semantic versions and changelogs in a reviewable PR, then publish a version tag and GitHub Release after it merges.
 
@@ -94,19 +95,19 @@ The reusable scan accepts two optional inputs:
 | `maven-cache-key` | empty | Restore the caller's cached `~/.m2/repository` before each Trivy scan; no Maven restoration when omitted |
 | `trivy-offline-scan` | `false` | Set Trivy's `TRIVY_OFFLINE_SCAN` to disable remote dependency-resolution requests |
 
-See [the Maven caller example](examples/security/maven.yml). Its build job sets up Java, restores dependencies, resolves Maven dependencies, and saves the repository cache after success. The security job uses `needs` to wait for that job and passes its exact cache key:
+Use [the reusable Maven preparation workflow](docs/maven/README.md) to keep the caller small; see [the complete example](examples/security/maven.yml). It sets up Java, restores dependencies, prepares each listed project, and saves a fresh repository cache. The security job waits for preparation and passes its output key:
 
 ```yaml
 security:
-  needs: backend-build
-  uses: youpi0214/github-workflows/.github/workflows/security-scan.yml@v1.1.0
+  needs: prepare-maven
+  uses: youpi0214/github-workflows/.github/workflows/security-scan.yml@v1.2.0
   with:
-    library-ref: v1.1.0
-    maven-cache-key: ${{ needs.backend-build.outputs.maven-cache-key }}
+    library-ref: v1.2.0
+    maven-cache-key: ${{ needs.prepare-maven.outputs.cache-key }}
     trivy-offline-scan: false
 ```
 
-Use an actual published version containing these inputs in both references. An existing Maven build can populate the cache instead of a separate preparation command. Adapt the example's POM path to the project or parent reactor, and include relevant POMs and resolution-affecting profiles/properties in the cache key. Builds and Maven plugins execute only in the caller's build job; the reusable scanner does not execute them. Cache only `~/.m2/repository`, not credential-bearing `settings.xml` files.
+Use an actual published version containing these inputs in both references. An existing Maven build can also supply a cache instead. With the reusable preparer, supply reactor root POMs through `pom-files`. The default `install` goal builds projects and installs sibling-module artifacts locally. Tests run by default; `skip-tests: true` skips execution while retaining test compilation. Use `maven-goals: dependency:resolve` when locally built artifacts are unnecessary. It computes configuration-aware cache prefixes and fresh per-run keys automatically. Builds and Maven plugins execute only in the caller's build job; the reusable scanner does not execute them. Cache only `~/.m2/repository`, not credential-bearing `settings.xml` files.
 
 Maven caches are scoped by GitHub's cache access rules and must be available to the scanner's branch/PR. Matching the key alone does not transfer files between jobs: the library restores them through `actions/cache/restore`. It does not save or modify the caller's cache entry. The Trivy database cache remains separate and is still managed by the Trivy Action.
 

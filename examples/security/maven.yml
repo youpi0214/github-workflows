@@ -8,43 +8,25 @@ permissions:
   contents: read
 
 jobs:
-  backend-build:
-    runs-on: ubuntu-24.04
-    outputs:
-      maven-cache-key: ${{ steps.maven-key.outputs.value }}
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-java@v6.2.0
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Compute the dependency cache key
-        id: maven-key
-        env:
-          CACHE_KEY: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
-        run: echo "value=$CACHE_KEY" >> "$GITHUB_OUTPUT"
-
-      - name: Restore dependencies and save them after a successful job
-        uses: actions/cache@v6.1.0
-        with:
-          path: ~/.m2/repository
-          key: ${{ steps.maven-key.outputs.value }}
-
-      - name: Populate Maven dependency metadata
-        # Adapt the POM path and command to your build/parent reactor.
-        # An existing Maven build can serve this purpose instead.
-        run: mvn --batch-mode --no-transfer-progress -f services/api/pom.xml dependency:resolve
+  prepare-maven:
+    uses: youpi0214/github-workflows/.github/workflows/maven-prepare.yml@v1.2.0
+    with:
+      library-ref: v1.2.0
+      # List reactor roots, not every module POM. Adapt these example paths.
+      pom-files: |
+        services/api/pom.xml
+        tools/importer/pom.xml
+      java-version: "21"
+      # install prepares sibling module artifacts as well as external dependencies.
+      maven-goals: install
+      skip-tests: true
 
   security:
-    needs: backend-build
-    uses: youpi0214/github-workflows/.github/workflows/security-scan.yml@v1.1.0
+    needs: prepare-maven
+    uses: youpi0214/github-workflows/.github/workflows/security-scan.yml@v1.2.0
     with:
-      library-ref: v1.1.0
-      targets: '[{"name":"api","paths":["services/api"]}]'
-      maven-cache-key: ${{ needs.backend-build.outputs.maven-cache-key }}
+      library-ref: v1.2.0
+      config-file: .github/security.yml
+      maven-cache-key: ${{ needs.prepare-maven.outputs.cache-key }}
       # Keep online resolution enabled until cache coverage is verified.
       trivy-offline-scan: false

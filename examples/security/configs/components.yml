@@ -1,5 +1,5 @@
-# Copy this configuration to .github/security.yml in the calling repository.
-# # then edit as needed
+# Copy this configuration to .github/components.yml in the calling repository.
+# then edit as needed
 components:
   api:
     paths:

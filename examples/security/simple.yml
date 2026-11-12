@@ -1,9 +1,13 @@
 name: Application security
+
 on:
   pull_request:
   push:
+
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
+
 jobs:
   security:
     uses: youpi0214/github-workflows/.github/workflows/security-scan.yml@v1.0.0

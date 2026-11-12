@@ -1,0 +1,76 @@
+name: Security Scan
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  schedule:
+    - cron: "15 8 * * 1" # Every Monday at 08:15 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # if you have a maven project and want to take advantage of caching
+  prepare-maven:
+    name: Prepare Maven Dependencies
+    uses: youpi0214/github-workflows/.github/workflows/maven-prepare.yml@v1.3.0
+    with:
+      library-ref: v1.3.0
+      pom-files: |
+        apps/api/pom.xml
+      java-version: "21"
+      skip-tests: true
+
+  selective:
+    name: Selective Security Scan
+    needs: prepare-maven
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'push'
+    uses: youpi0214/github-workflows/.github/workflows/security-scan.yml@v1.3.0
+    with:
+      library-ref: v1.3.0
+      mode: selective
+      config-file: .github/components.yml # necessary only for monorepos
+      scanners: '["semgrep","trivy"]'
+      semgrep-rules: '["p/default"]'
+      maven-cache-key: ${{ needs.prepare-maven.outputs.cache-key }}
+      trivy-offline-scan: false
+      trivy-ignore-unfixed: false
+      fail-severity: HIGH
+      enforce: true
+      fail-on-error: true
+      pr-comment: true
+      publish: false
+      retention-days: 30
+
+  full:
+    name: Full Security Audit
+    needs: prepare-maven
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    uses: youpi0214/github-workflows/.github/workflows/security-scan.yml@v1.3.0
+    with:
+      library-ref: v1.3.0
+      mode: full
+      scanners: '["semgrep","trivy"]'
+      semgrep-rules: '["p/default"]'
+      maven-cache-key: ${{ needs.prepare-maven.outputs.cache-key }}
+      trivy-offline-scan: false
+      trivy-ignore-unfixed: false
+      fail-severity: HIGH
+      enforce: true
+      fail-on-error: true
+      pr-comment: false
+      # Enable only when repository visibility permits storing findings.
+      publish: true
+      retention-days: 30
